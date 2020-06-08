@@ -3,6 +3,9 @@ import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
+from thebrain.models.inpainting import Inpainting
+
+inpainter = Inpainting()
 
 
 class BaseNetwork(nn.Module):
@@ -370,18 +373,32 @@ class Inpaint_Color_Net(nn.Module):
 
     def forward_3P(self, mask, context, rgb, edge, unit_length=128, cuda=None):
         with torch.no_grad():
-            input = torch.cat((rgb, edge, context, mask), dim=1)
-            n, c, h, w = input.shape
-            residual_h = int(np.ceil(h / float(unit_length)) * unit_length - h) # + 128
-            residual_w = int(np.ceil(w / float(unit_length)) * unit_length - w) # + 256
-            anchor_h = residual_h//2
-            anchor_w = residual_w//2
-            enlarge_input = torch.zeros((n, c, h + residual_h, w + residual_w)).to(cuda)
-            enlarge_input[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w] = input
-            # enlarge_input[:, 3] = 1. - enlarge_input[:, 3]
-            enlarge_input = enlarge_input.to(cuda)
-            rgb_output = self.forward(enlarge_input)
-            rgb_output = rgb_output[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w]
+            # input = torch.cat((rgb, edge, context, mask), dim=1)
+            # n, c, h, w = input.shape
+            # residual_h = int(np.ceil(h / float(unit_length)) * unit_length - h) # + 128
+            # residual_w = int(np.ceil(w / float(unit_length)) * unit_length - w) # + 256
+            # anchor_h = residual_h//2
+            # anchor_w = residual_w//2
+            # enlarge_input = torch.zeros((n, c, h + residual_h, w + residual_w)).to(cuda)
+            # enlarge_input[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w] = input
+            # # enlarge_input[:, 3] = 1. - enlarge_input[:, 3]
+            # enlarge_input = enlarge_input.to(cuda)
+            # rgb_output = self.forward(enlarge_input)
+            # rgb_output = rgb_output[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w]
+
+            img = rgb[0].numpy()
+            img = np.swapaxes(img, 0, 2)
+            img = np.swapaxes(img, 0, 1)
+            img = img * 255
+            img = img.astype(np.uint8)
+            msk = mask[0][0].numpy()
+            msk = msk * 255
+            msk[msk != 255] = 0
+            msk = msk.astype(np.uint8)
+            print('starting inpainting')
+            inpainted = inpainter(image=img, mask=msk, use_patchmatch=False)
+            print('inpainting done')
+            rgb_output = torch.FloatTensor(inpainted).to("cpu").permute(2,0,1).unsqueeze(0)
 
         return rgb_output
 
