@@ -61,6 +61,8 @@ for idx in tqdm(range(len(sample_list))):
     config['original_h'], config['original_w'] = config['output_h'], config['output_w']
     if image.ndim == 2:
         image = image[..., None].repeat(3, -1)
+    else:
+        image = image[..., :3]
     if np.sum(np.abs(image[..., 0] - image[..., 1])) == 0 and np.sum(np.abs(image[..., 1] - image[..., 2])) == 0:
         config['gray_image'] = True
     else:

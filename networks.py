@@ -4,6 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from thebrain.models.inpainting import Inpainting
+from scipy.ndimage.morphology import binary_dilation
+import imageio
+from scipy.interpolate import griddata
 
 inpainter = Inpainting()
 
@@ -158,6 +161,7 @@ class Inpaint_Depth_Net(nn.Module):
         self.dec_2 = PCBActiv(128 + 64, 64, activ='leaky')
         self.dec_1 = PCBActiv(64 + in_channels, out_channels,
                               bn=False, activ=None, conv_bias=True)
+        # self.count = 0
     def add_border(self, input, mask_flag, PCONV=True):
         with torch.no_grad():
             h = input.shape[-2]
@@ -178,20 +182,55 @@ class Inpaint_Depth_Net(nn.Module):
 
         return enlarge_input, [anchor_h, anchor_h+h, anchor_w, anchor_w+w]
 
-    def forward_3P(self, mask, context, depth, edge, unit_length=128, cuda=None):
+    def forward_3P(self, mask, context, depth, edge, unit_length=128, cuda=None, mode='ours'):
         with torch.no_grad():
-            input = torch.cat((depth, edge, context, mask), dim=1)
-            n, c, h, w = input.shape
-            residual_h = int(np.ceil(h / float(unit_length)) * unit_length - h)
-            residual_w = int(np.ceil(w / float(unit_length)) * unit_length - w)
-            anchor_h = residual_h//2
-            anchor_w = residual_w//2
-            enlarge_input = torch.zeros((n, c, h + residual_h, w + residual_w)).to(cuda)
-            enlarge_input[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w] = input
-            # enlarge_input[:, 3] = 1. - enlarge_input[:, 3]
-            depth_output = self.forward(enlarge_input)
-            depth_output = depth_output[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w]
-            # import pdb; pdb.set_trace()
+            # print('depth inpainting')
+            if mode == 'orig':
+                input = torch.cat((depth, edge, context, mask), dim=1)
+                n, c, h, w = input.shape
+                residual_h = int(np.ceil(h / float(unit_length)) * unit_length - h)
+                residual_w = int(np.ceil(w / float(unit_length)) * unit_length - w)
+                anchor_h = residual_h//2
+                anchor_w = residual_w//2
+                enlarge_input = torch.zeros((n, c, h + residual_h, w + residual_w)).to(cuda)
+                enlarge_input[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w] = input
+                # enlarge_input[:, 3] = 1. - enlarge_input[:, 3]
+                depth_output = self.forward(enlarge_input)
+                depth_output = depth_output[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w]
+                # import pdb; pdb.set_trace()
+            elif mode == 'ours':
+                # Extrapolation
+                ctx = context[0][0].numpy()
+                (cx, cy) = np.where(ctx > 0)
+                msk = mask[0][0].numpy()
+                (mx, my) = np.where(msk > -1)
+                dpt = depth[0][0].numpy()
+                points = np.hstack([cx.reshape((-1, 1)), cy.reshape((-1, 1))])
+                grid = griddata(points, dpt[cx, cy], (mx, my), method='nearest')
+                grid = grid.reshape(dpt.shape)
+                depth_output = torch.FloatTensor(grid).to("cpu")[None, None, ...]
+            # Save
+            # depth = depth[0][0].numpy()
+            # depth = 255 * (depth - depth.min()) / (depth.max() - depth.min())
+            # depth = depth.astype(np.uint8)
+            # msk = mask[0][0].numpy()
+            # msk = msk * 255
+            # msk = msk.astype(np.uint8)
+            # edg = edge[0][0].numpy()
+            # edg = edg * 255
+            # edg = edg.astype(np.uint8)
+            # ctx = context[0][0].numpy()
+            # ctx = ctx * 255
+            # ctx = ctx.astype(np.uint8)
+            # res = depth_output[0][0].numpy()
+            # res = 255 * (res - res.min()) / (res.max() - res.min())
+            # res = res.astype(np.uint8)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_depth/' + str(self.count) + '_depth.png', depth)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_depth/' + str(self.count) + '_msk.png', msk)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_depth/' + str(self.count) + '_edg.png', edg)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_depth/' + str(self.count) + '_ctx.png', ctx)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_depth/' + str(self.count) + '_res.png', res)
+            # self.count += 1
 
         return depth_output
 
@@ -284,6 +323,7 @@ class Inpaint_Edge_Net(BaseNetwork):
 
         if init_weights:
             self.init_weights()
+        # self.count = 0
 
     def add_border(self, input, channel_pad_1=None):
         h = input.shape[-2]
@@ -301,18 +341,50 @@ class Inpaint_Edge_Net(BaseNetwork):
 
         return enlarge_input, [anchor_h, anchor_h+h, anchor_w, anchor_w+w]
 
-    def forward_3P(self, mask, context, rgb, disp, edge, unit_length=128, cuda=None):
+    def forward_3P(self, mask, context, rgb, disp, edge, unit_length=128, cuda=None, mode='ours'):
         with torch.no_grad():
-            input = torch.cat((rgb, disp/disp.max(), edge, context, mask), dim=1)
-            n, c, h, w = input.shape
-            residual_h = int(np.ceil(h / float(unit_length)) * unit_length - h)
-            residual_w = int(np.ceil(w / float(unit_length)) * unit_length - w)
-            anchor_h = residual_h//2
-            anchor_w = residual_w//2
-            enlarge_input = torch.zeros((n, c, h + residual_h, w + residual_w)).to(cuda)
-            enlarge_input[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w] = input
-            edge_output = self.forward(enlarge_input)
-            edge_output = edge_output[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w]
+            # print('edge inpainting')
+            if mode == 'orig':
+                input = torch.cat((rgb, disp/disp.max(), edge, context, mask), dim=1)
+                n, c, h, w = input.shape
+                residual_h = int(np.ceil(h / float(unit_length)) * unit_length - h)
+                residual_w = int(np.ceil(w / float(unit_length)) * unit_length - w)
+                anchor_h = residual_h//2
+                anchor_w = residual_w//2
+                enlarge_input = torch.zeros((n, c, h + residual_h, w + residual_w)).to(cuda)
+                enlarge_input[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w] = input
+                edge_output = self.forward(enlarge_input)
+                edge_output = edge_output[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w]
+            elif mode == 'ours':
+                edge_output = torch.zeros_like(edge)
+            # Save
+            # img = rgb[0].numpy()
+            # img = np.swapaxes(img, 0, 2)
+            # img = np.swapaxes(img, 0, 1)
+            # img = img * 255
+            # img = img.astype(np.uint8)
+            # disp = disp[0][0].numpy()
+            # disp = 255 * (disp - disp.min()) / (disp.max() - disp.min())
+            # disp = disp.astype(np.uint8)
+            # msk = mask[0][0].numpy()
+            # msk = msk * 255
+            # msk = msk.astype(np.uint8)
+            # edg = edge[0][0].numpy()
+            # edg = edg * 255
+            # edg = edg.astype(np.uint8)
+            # ctx = context[0][0].numpy()
+            # ctx = ctx * 255
+            # ctx = ctx.astype(np.uint8)
+            # res = edge_output[0][0].numpy()
+            # res = res * 255
+            # res = res.astype(np.uint8)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_edge/' + str(self.count) + '_img.png', img)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_edge/' + str(self.count) + '_disp.png', disp)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_edge/' + str(self.count) + '_msk.png', msk)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_edge/' + str(self.count) + '_edg.png', edg)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_edge/' + str(self.count) + '_ctx.png', ctx)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_edge/' + str(self.count) + '_res.png', res)
+            # self.count += 1
 
         return edge_output
 
@@ -362,6 +434,7 @@ class Inpaint_Color_Net(nn.Module):
         self.dec_2B = PCBActiv(128 + 64, 64, activ='leaky')
         self.dec_1B = PCBActiv(64 + 4, 1, bn=False, activ=None, conv_bias=True)
         '''
+        # self.count = 0
     def cat(self, A, B):
         return torch.cat((A, B), dim=1)
 
@@ -371,34 +444,67 @@ class Inpaint_Color_Net(nn.Module):
 
         return feat, mask
 
-    def forward_3P(self, mask, context, rgb, edge, unit_length=128, cuda=None):
+    def forward_3P(self, mask, context, rgb, edge, unit_length=128, cuda=None, mode='ours'):
         with torch.no_grad():
-            # input = torch.cat((rgb, edge, context, mask), dim=1)
-            # n, c, h, w = input.shape
-            # residual_h = int(np.ceil(h / float(unit_length)) * unit_length - h) # + 128
-            # residual_w = int(np.ceil(w / float(unit_length)) * unit_length - w) # + 256
-            # anchor_h = residual_h//2
-            # anchor_w = residual_w//2
-            # enlarge_input = torch.zeros((n, c, h + residual_h, w + residual_w)).to(cuda)
-            # enlarge_input[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w] = input
-            # # enlarge_input[:, 3] = 1. - enlarge_input[:, 3]
-            # enlarge_input = enlarge_input.to(cuda)
-            # rgb_output = self.forward(enlarge_input)
-            # rgb_output = rgb_output[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w]
-
-            img = rgb[0].numpy()
-            img = np.swapaxes(img, 0, 2)
-            img = np.swapaxes(img, 0, 1)
-            img = img * 255
-            img = img.astype(np.uint8)
-            msk = mask[0][0].numpy()
-            msk = msk * 255
-            msk[msk != 255] = 0
-            msk = msk.astype(np.uint8)
-            print('starting inpainting')
-            inpainted = inpainter(image=img, mask=msk, use_patchmatch=False)
-            print('inpainting done')
-            rgb_output = torch.FloatTensor(inpainted).to("cpu").permute(2,0,1).unsqueeze(0)
+            # print('rgb inpainting')
+            if mode == 'orig':
+                input = torch.cat((rgb, edge, context, mask), dim=1)
+                n, c, h, w = input.shape
+                residual_h = int(np.ceil(h / float(unit_length)) * unit_length - h) # + 128
+                residual_w = int(np.ceil(w / float(unit_length)) * unit_length - w) # + 256
+                anchor_h = residual_h//2
+                anchor_w = residual_w//2
+                enlarge_input = torch.zeros((n, c, h + residual_h, w + residual_w)).to(cuda)
+                enlarge_input[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w] = input
+                # enlarge_input[:, 3] = 1. - enlarge_input[:, 3]
+                enlarge_input = enlarge_input.to(cuda)
+                rgb_output = self.forward(enlarge_input)
+                rgb_output = rgb_output[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w]
+            elif mode == 'ours':
+                img = rgb[0].numpy()
+                img = np.swapaxes(img, 0, 2)
+                img = np.swapaxes(img, 0, 1)
+                img = img * 255
+                img = img.astype(np.uint8)
+                msk = mask[0][0].numpy()
+                msk = msk * 255
+                msk[msk != 255] = 0
+                msk = msk.astype(np.uint8)
+                msk_for_inpainting = np.zeros_like(msk, dtype=np.uint8)
+                msk_for_inpainting[np.sum(img, axis=2) == 0] = 255
+                msk_for_inpainting = binary_dilation(msk_for_inpainting, iterations=5)
+                msk_for_inpainting = msk_for_inpainting.astype(np.uint8) * 255
+                inpainted = inpainter(image=img, mask=msk_for_inpainting, use_patchmatch=False)
+                res_img = np.copy(img.astype(np.float) / 255.)
+                idx, idy = np.where(msk > 0)
+                res_img[idx, idy, :] = inpainted[idx, idy, :]
+                rgb_output = torch.FloatTensor(res_img).to("cpu").permute(2,0,1).unsqueeze(0)
+            # Save
+            # img = rgb[0].numpy()
+            # img = np.swapaxes(img, 0, 2)
+            # img = np.swapaxes(img, 0, 1)
+            # img = img * 255
+            # img = img.astype(np.uint8)
+            # msk = mask[0][0].numpy()
+            # msk = msk * 255
+            # msk = msk.astype(np.uint8)
+            # edg =edge[0][0].numpy()
+            # edg = edg * 255
+            # edg = edg.astype(np.uint8)
+            # ctx = context[0][0].numpy()
+            # ctx = ctx * 255
+            # ctx = ctx.astype(np.uint8)
+            # res = rgb_output[0].numpy()
+            # res = np.swapaxes(res, 0, 2)
+            # res = np.swapaxes(res, 0, 1)
+            # res = res * 255
+            # res = res.astype(np.uint8)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_rgb/' + str(self.count) + '_img.png', img)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_rgb/' + str(self.count) + '_msk.png', msk)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_rgb/' + str(self.count) + '_edg.png', edg)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_rgb/' + str(self.count) + '_ctx.png', ctx)
+            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_rgb/' + str(self.count) + '_res.png', res)
+            # self.count += 1
 
         return rgb_output
 
