@@ -1703,7 +1703,8 @@ def DL_inpaint_edge(mesh,
                                             resize_rgb_dict['rgb'],
                                             resize_rgb_dict['edge'],
                                             unit_length=128,
-                                            cuda=device)
+                                            cuda=device,
+                                            save=True)
             rgb_output = rgb_output.cpu()
             if config.get('gray_image') is True:
                 rgb_output = rgb_output.mean(1, keepdim=True).repeat((1,3,1,1))

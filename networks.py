@@ -3,12 +3,12 @@ import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
-from thebrain.models.inpainting import Inpainting
-from scipy.ndimage.morphology import binary_dilation
+# from thebrain.models.inpainting import Inpainting
+# from scipy.ndimage.morphology import binary_dilation
 import imageio
-from scipy.interpolate import griddata
+# from scipy.interpolate import griddata
 
-inpainter = Inpainting()
+# inpainter = Inpainting()
 
 
 class BaseNetwork(nn.Module):
@@ -182,7 +182,7 @@ class Inpaint_Depth_Net(nn.Module):
 
         return enlarge_input, [anchor_h, anchor_h+h, anchor_w, anchor_w+w]
 
-    def forward_3P(self, mask, context, depth, edge, unit_length=128, cuda=None, mode='ours'):
+    def forward_3P(self, mask, context, depth, edge, unit_length=128, cuda=None, mode='orig'):
         with torch.no_grad():
             # print('depth inpainting')
             if mode == 'orig':
@@ -434,7 +434,7 @@ class Inpaint_Color_Net(nn.Module):
         self.dec_2B = PCBActiv(128 + 64, 64, activ='leaky')
         self.dec_1B = PCBActiv(64 + 4, 1, bn=False, activ=None, conv_bias=True)
         '''
-        # self.count = 0
+        self.count = 0
     def cat(self, A, B):
         return torch.cat((A, B), dim=1)
 
@@ -444,7 +444,7 @@ class Inpaint_Color_Net(nn.Module):
 
         return feat, mask
 
-    def forward_3P(self, mask, context, rgb, edge, unit_length=128, cuda=None, mode='orig'):
+    def forward_3P(self, mask, context, rgb, edge, unit_length=128, cuda=None, mode='orig', save=False):
         with torch.no_grad():
             # print('rgb inpainting')
             if mode == 'orig':
@@ -483,31 +483,32 @@ class Inpaint_Color_Net(nn.Module):
                 res_img[idx, idy, :] = inpainted[idx, idy, :]
                 rgb_output = torch.FloatTensor(res_img).to("cpu").permute(2,0,1).unsqueeze(0)
             # Save
-            # img = rgb[0].numpy()
-            # img = np.swapaxes(img, 0, 2)
-            # img = np.swapaxes(img, 0, 1)
-            # img = img * 255
-            # img = img.astype(np.uint8)
-            # msk = mask[0][0].numpy()
-            # msk = msk * 255
-            # msk = msk.astype(np.uint8)
-            # edg = edge[0][0].numpy()
-            # edg = edg * 255
-            # edg = edg.astype(np.uint8)
-            # ctx = context[0][0].numpy()
-            # ctx = ctx * 255
-            # ctx = ctx.astype(np.uint8)
-            # res = rgb_output[0].numpy()
-            # res = np.swapaxes(res, 0, 2)
-            # res = np.swapaxes(res, 0, 1)
-            # res = res * 255
-            # res = res.astype(np.uint8)
-            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_rgb/' + str(self.count) + '_img.png', img)
-            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_rgb/' + str(self.count) + '_msk.png', msk)
-            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_rgb/' + str(self.count) + '_edg.png', edg)
-            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_rgb/' + str(self.count) + '_ctx.png', ctx)
-            # imageio.imwrite('/Users/jchetboun/Projects/3d-photo-inpainting/save_rgb/' + str(self.count) + '_res.png', res)
-            # self.count += 1
+            if save:
+                img = rgb[0].cpu().numpy()
+                img = np.swapaxes(img, 0, 2)
+                img = np.swapaxes(img, 0, 1)
+                img = img * 255
+                img = img.astype(np.uint8)
+                msk = mask[0][0].cpu().numpy()
+                msk = msk * 255
+                msk = msk.astype(np.uint8)
+                edg =edge[0][0].cpu().numpy()
+                edg = edg * 255
+                edg = edg.astype(np.uint8)
+                ctx = context[0][0].cpu().numpy()
+                ctx = ctx * 255
+                ctx = ctx.astype(np.uint8)
+                res = rgb_output[0].cpu().numpy()
+                res = np.swapaxes(res, 0, 2)
+                res = np.swapaxes(res, 0, 1)
+                res = res * 255
+                res = res.astype(np.uint8)
+                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + str(self.count) + '_img.png', img)
+                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + str(self.count) + '_msk.png', msk)
+                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + str(self.count) + '_edg.png', edg)
+                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + str(self.count) + '_ctx.png', ctx)
+                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + str(self.count) + '_res.png', res)
+                self.count += 1
 
         return rgb_output
 
