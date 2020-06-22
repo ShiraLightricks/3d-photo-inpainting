@@ -341,7 +341,7 @@ class Inpaint_Edge_Net(BaseNetwork):
 
         return enlarge_input, [anchor_h, anchor_h+h, anchor_w, anchor_w+w]
 
-    def forward_3P(self, mask, context, rgb, disp, edge, unit_length=128, cuda=None, mode='ours'):
+    def forward_3P(self, mask, context, rgb, disp, edge, unit_length=128, cuda=None, mode='orig'):
         with torch.no_grad():
             # print('edge inpainting')
             if mode == 'orig':
@@ -444,7 +444,7 @@ class Inpaint_Color_Net(nn.Module):
 
         return feat, mask
 
-    def forward_3P(self, mask, context, rgb, edge, unit_length=128, cuda=None, mode='ours'):
+    def forward_3P(self, mask, context, rgb, edge, unit_length=128, cuda=None, mode='orig'):
         with torch.no_grad():
             # print('rgb inpainting')
             if mode == 'orig':
@@ -470,8 +470,11 @@ class Inpaint_Color_Net(nn.Module):
                 msk = msk * 255
                 msk[msk != 255] = 0
                 msk = msk.astype(np.uint8)
+                ctx = context[0][0].numpy()
+                ctx = ctx * 255
+                ctx = ctx.astype(np.uint8)
                 msk_for_inpainting = np.zeros_like(msk, dtype=np.uint8)
-                msk_for_inpainting[np.sum(img, axis=2) == 0] = 255
+                msk_for_inpainting[ctx == 0] = 255
                 msk_for_inpainting = binary_dilation(msk_for_inpainting, iterations=5)
                 msk_for_inpainting = msk_for_inpainting.astype(np.uint8) * 255
                 inpainted = inpainter(image=img, mask=msk_for_inpainting, use_patchmatch=False)
@@ -488,7 +491,7 @@ class Inpaint_Color_Net(nn.Module):
             # msk = mask[0][0].numpy()
             # msk = msk * 255
             # msk = msk.astype(np.uint8)
-            # edg =edge[0][0].numpy()
+            # edg = edge[0][0].numpy()
             # edg = edg * 255
             # edg = edg.astype(np.uint8)
             # ctx = context[0][0].numpy()

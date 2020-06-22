@@ -41,6 +41,31 @@ else:
 
 print(f"running on device {device}")
 
+print(f"Loading edge model at {time.time()}")
+depth_edge_model = Inpaint_Edge_Net(init_weights=True)
+depth_edge_weight = torch.load(config['depth_edge_model_ckpt'],
+                                map_location=torch.device(device))
+depth_edge_model.load_state_dict(depth_edge_weight)
+depth_edge_model = depth_edge_model.to(device)
+depth_edge_model.eval()
+
+print(f"Loading depth model at {time.time()}")
+depth_feat_model = Inpaint_Depth_Net()
+depth_feat_weight = torch.load(config['depth_feat_model_ckpt'],
+                                map_location=torch.device(device))
+depth_feat_model.load_state_dict(depth_feat_weight, strict=True)
+depth_feat_model = depth_feat_model.to(device)
+depth_feat_model.eval()
+depth_feat_model = depth_feat_model.to(device)
+print(f"Loading rgb model at {time.time()}")
+rgb_model = Inpaint_Color_Net()
+rgb_feat_weight = torch.load(config['rgb_feat_model_ckpt'],
+                                map_location=torch.device(device))
+rgb_model.load_state_dict(rgb_feat_weight)
+rgb_model.eval()
+rgb_model = rgb_model.to(device)
+graph = None
+
 for idx in tqdm(range(len(sample_list))):
     depth = None
     sample = sample_list[idx]
@@ -73,33 +98,33 @@ for idx in tqdm(range(len(sample_list))):
     if not(config['load_ply'] is True and os.path.exists(mesh_fi)):
         vis_photos, vis_depths = sparse_bilateral_filtering(depth.copy(), image.copy(), config, num_iter=config['sparse_iter'], spdb=False)
         depth = vis_depths[-1]
-        model = None
+        # model = None
         torch.cuda.empty_cache()
-        print("Start Running 3D_Photo ...")
-        print(f"Loading edge model at {time.time()}")
-        depth_edge_model = Inpaint_Edge_Net(init_weights=True)
-        depth_edge_weight = torch.load(config['depth_edge_model_ckpt'],
-                                       map_location=torch.device(device))
-        depth_edge_model.load_state_dict(depth_edge_weight)
-        depth_edge_model = depth_edge_model.to(device)
-        depth_edge_model.eval()
-
-        print(f"Loading depth model at {time.time()}")
-        depth_feat_model = Inpaint_Depth_Net()
-        depth_feat_weight = torch.load(config['depth_feat_model_ckpt'],
-                                       map_location=torch.device(device))
-        depth_feat_model.load_state_dict(depth_feat_weight, strict=True)
-        depth_feat_model = depth_feat_model.to(device)
-        depth_feat_model.eval()
-        depth_feat_model = depth_feat_model.to(device)
-        print(f"Loading rgb model at {time.time()}")
-        rgb_model = Inpaint_Color_Net()
-        rgb_feat_weight = torch.load(config['rgb_feat_model_ckpt'],
-                                     map_location=torch.device(device))
-        rgb_model.load_state_dict(rgb_feat_weight)
-        rgb_model.eval()
-        rgb_model = rgb_model.to(device)
-        graph = None
+        # print("Start Running 3D_Photo ...")
+        # print(f"Loading edge model at {time.time()}")
+        # depth_edge_model = Inpaint_Edge_Net(init_weights=True)
+        # depth_edge_weight = torch.load(config['depth_edge_model_ckpt'],
+        #                                map_location=torch.device(device))
+        # depth_edge_model.load_state_dict(depth_edge_weight)
+        # depth_edge_model = depth_edge_model.to(device)
+        # depth_edge_model.eval()
+        #
+        # print(f"Loading depth model at {time.time()}")
+        # depth_feat_model = Inpaint_Depth_Net()
+        # depth_feat_weight = torch.load(config['depth_feat_model_ckpt'],
+        #                                map_location=torch.device(device))
+        # depth_feat_model.load_state_dict(depth_feat_weight, strict=True)
+        # depth_feat_model = depth_feat_model.to(device)
+        # depth_feat_model.eval()
+        # depth_feat_model = depth_feat_model.to(device)
+        # print(f"Loading rgb model at {time.time()}")
+        # rgb_model = Inpaint_Color_Net()
+        # rgb_feat_weight = torch.load(config['rgb_feat_model_ckpt'],
+        #                              map_location=torch.device(device))
+        # rgb_model.load_state_dict(rgb_feat_weight)
+        # rgb_model.eval()
+        # rgb_model = rgb_model.to(device)
+        # graph = None
 
 
         print(f"Writing depth ply (and basically doing everything) at {time.time()}")
@@ -115,10 +140,10 @@ for idx in tqdm(range(len(sample_list))):
 
         if rt_info is False:
             continue
-        rgb_model = None
-        color_feat_model = None
-        depth_edge_model = None
-        depth_feat_model = None
+        # rgb_model = None
+        # color_feat_model = None
+        # depth_edge_model = None
+        # depth_feat_model = None
         torch.cuda.empty_cache()
     if config['save_ply'] is True or config['load_ply'] is True:
         verts, colors, faces, Height, Width, hFov, vFov = read_ply(mesh_fi)
@@ -126,6 +151,7 @@ for idx in tqdm(range(len(sample_list))):
         verts, colors, faces, Height, Width, hFov, vFov = rt_info
 
 
+    continue
     print(f"Making video at {time.time()}")
     videos_poses, video_basename = copy.deepcopy(sample['tgts_poses']), sample['tgt_name']
     top = (config.get('original_h') // 2 - sample['int_mtx'][1, 2] * config['output_h'])
