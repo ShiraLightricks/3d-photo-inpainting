@@ -1484,11 +1484,8 @@ def DL_inpaint_edge(mesh,
             patch_edge_dict['output']
         if require_depth_edge(patch_edge_dict['edge'], patch_edge_dict['mask']) and inpaint_iter == 0:
             if ((depth_edge_output> config['ext_edge_threshold']).float() * tensor_edge_dict['mask']).max() > 0:
-                try:
-                    edge_dict['fpath_map'], edge_dict['npath_map'], break_flag, npaths, fpaths, invalid_edge_id = \
-                        clean_far_edge_new(edge_dict['output'], end_depth_maps, edge_dict['mask'], edge_dict['context'], mesh, info_on_pix, edge_dict['self_edge'], inpaint_iter, config)
-                except:
-                    import pdb; pdb.set_trace()
+                edge_dict['fpath_map'], edge_dict['npath_map'], break_flag, npaths, fpaths, invalid_edge_id = \
+                    clean_far_edge_new(edge_dict['output'], end_depth_maps, edge_dict['mask'], edge_dict['context'], mesh, info_on_pix, edge_dict['self_edge'], inpaint_iter, config)
                 pre_npath_map = edge_dict['npath_map'].copy()
                 if config.get('repeat_inpaint_edge') is True:
                     for _ in range(2):

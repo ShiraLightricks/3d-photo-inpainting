@@ -128,15 +128,19 @@ for idx in tqdm(range(len(sample_list))):
 
 
         print(f"Writing depth ply (and basically doing everything) at {time.time()}")
-        rt_info = write_ply(image,
-                              depth,
-                              sample['int_mtx'],
-                              mesh_fi,
-                              config,
-                              rgb_model,
-                              depth_edge_model,
-                              depth_edge_model,
-                              depth_feat_model)
+        try:
+            rt_info = write_ply(image,
+                                depth,
+                                sample['int_mtx'],
+                                mesh_fi,
+                                config,
+                                rgb_model,
+                                depth_edge_model,
+                                depth_edge_model,
+                                depth_feat_model)
+        except:
+            print("Skipping")
+            continue
 
         if rt_info is False:
             continue
