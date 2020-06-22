@@ -492,7 +492,7 @@ class Inpaint_Color_Net(nn.Module):
                 msk = mask[0][0].cpu().numpy()
                 msk = msk * 255
                 msk = msk.astype(np.uint8)
-                edg =edge[0][0].cpu().numpy()
+                edg = edge[0][0].cpu().numpy()
                 edg = edg * 255
                 edg = edg.astype(np.uint8)
                 ctx = context[0][0].cpu().numpy()
@@ -503,11 +503,11 @@ class Inpaint_Color_Net(nn.Module):
                 res = np.swapaxes(res, 0, 1)
                 res = res * 255
                 res = res.astype(np.uint8)
-                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + str(self.count) + '_img.png', img)
-                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + str(self.count) + '_msk.png', msk)
-                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + str(self.count) + '_edg.png', edg)
-                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + str(self.count) + '_ctx.png', ctx)
-                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + str(self.count) + '_res.png', res)
+                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + '{:06d}'.format(self.count) + '_img.png', img)
+                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + '{:06d}'.format(self.count) + '_msk.png', msk)
+                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + '{:06d}'.format(self.count) + '_edg.png', edg)
+                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + '{:06d}'.format(self.count) + '_ctx.png', ctx)
+                imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Save/' + '{:06d}'.format(self.count) + '_res.png', res)
                 self.count += 1
 
         return rgb_output
