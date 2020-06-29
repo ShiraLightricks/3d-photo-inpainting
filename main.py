@@ -137,7 +137,8 @@ for idx in tqdm(range(len(sample_list))):
                                 rgb_model,
                                 depth_edge_model,
                                 depth_edge_model,
-                                depth_feat_model)
+                                depth_feat_model,
+                                basename=sample['src_pair_name'])
         except:
             print("Skipping")
             continue

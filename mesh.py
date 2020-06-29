@@ -24,6 +24,7 @@ from mesh_tools import refresh_bord_depth, enlarge_border, fill_dummy_bord, extr
 import transforms3d
 import random
 from functools import reduce
+import imageio
 
 def create_mesh(depth, image, int_mtx, config):
     H, W, C = image.shape
@@ -1405,7 +1406,8 @@ def DL_inpaint_edge(mesh,
                     depth_feat_model=None,
                     specific_edge_id=-1,
                     specific_edge_loc=None,
-                    inpaint_iter=0):
+                    inpaint_iter=0,
+                    basename=None):
 
     if isinstance(config["gpu_ids"], int) and (config["gpu_ids"] >= 0):
         device = config["gpu_ids"]
@@ -1694,6 +1696,10 @@ def DL_inpaint_edge(mesh,
         rgb_input_feat[:, 3] = 1 - rgb_input_feat[:, 3]
         resize_mask = open_small_mask(resize_rgb_dict['mask'], resize_rgb_dict['context'], 3, 41)
         specified_hole = resize_mask
+        # Save
+        if basename is not None:
+            imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Masks/' + basename + '_{:02d}'.format(edge_id) + '_msk.png', 255 * resize_rgb_dict['mask'][0][0].cpu().numpy().astype(np.uint8))
+            imageio.imwrite('/isilon/Research-Results/Jonathan/Inpainting/Masks/' + basename + '_{:02d}'.format(edge_id) + '_ctx.png', 255 * resize_rgb_dict['context'][0][0].cpu().numpy().astype(np.uint8))
         with torch.no_grad():
             rgb_output = rgb_model.forward_3P(specified_hole,
                                             resize_rgb_dict['context'],
@@ -1701,7 +1707,7 @@ def DL_inpaint_edge(mesh,
                                             resize_rgb_dict['edge'],
                                             unit_length=128,
                                             cuda=device,
-                                            save=True)
+                                            save=False)
             rgb_output = rgb_output.cpu()
             if config.get('gray_image') is True:
                 rgb_output = rgb_output.mean(1, keepdim=True).repeat((1,3,1,1))
@@ -1823,7 +1829,8 @@ def write_ply(image,
               rgb_model,
               depth_edge_model,
               depth_edge_model_init,
-              depth_feat_model):
+              depth_feat_model,
+              basename=None):
     depth = depth.astype(np.float64)
     input_mesh, xy2depth, image, depth = create_mesh(depth, image, int_mtx, config)
 
@@ -1935,7 +1942,8 @@ def write_ply(image,
                                                                                                             depth_feat_model,
                                                                                                             specific_edge_id,
                                                                                                             specific_edge_loc,
-                                                                                                            inpaint_iter=0)
+                                                                                                            inpaint_iter=0,
+                                                                                                            basename=basename)
     specific_edge_id = []
     edge_canvas = np.zeros((input_mesh.graph['H'], input_mesh.graph['W']))
     connect_points_ccs = [set() for _ in connect_points_ccs]

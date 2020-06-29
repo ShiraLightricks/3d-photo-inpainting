@@ -12,7 +12,7 @@ video_postfix: ['dolly-zoom-in', 'zoom-in', 'circle', 'swing']
 specific: ''
 longer_side_len: 512
 src_folder: /isilon/Datasets/Places/train_images/places
-depth_folder: depth
+depth_folder: /isilon/Research-Results/Jonathan/Inpainting/Depth/
 mesh_folder: mesh
 video_folder: video
 load_ply: False
