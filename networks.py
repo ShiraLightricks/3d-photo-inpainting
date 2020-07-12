@@ -182,7 +182,7 @@ class Inpaint_Depth_Net(nn.Module):
 
         return enlarge_input, [anchor_h, anchor_h+h, anchor_w, anchor_w+w]
 
-    def forward_3P(self, mask, context, depth, edge, unit_length=128, cuda=None, mode='ours'):
+    def forward_3P(self, mask, context, depth, edge, unit_length=128, cuda=None, mode='orig'):
         with torch.no_grad():
             # print('depth inpainting')
             if mode == 'orig':
@@ -341,7 +341,7 @@ class Inpaint_Edge_Net(BaseNetwork):
 
         return enlarge_input, [anchor_h, anchor_h+h, anchor_w, anchor_w+w]
 
-    def forward_3P(self, mask, context, rgb, disp, edge, unit_length=128, cuda=None, mode='ours'):
+    def forward_3P(self, mask, context, rgb, disp, edge, unit_length=128, cuda=None, mode='orig'):
         with torch.no_grad():
             # print('edge inpainting')
             if mode == 'orig':
@@ -434,7 +434,7 @@ class Inpaint_Color_Net(nn.Module):
         self.dec_2B = PCBActiv(128 + 64, 64, activ='leaky')
         self.dec_1B = PCBActiv(64 + 4, 1, bn=False, activ=None, conv_bias=True)
         '''
-        # self.count = 0
+        self.count = 0
     def cat(self, A, B):
         return torch.cat((A, B), dim=1)
 
@@ -444,7 +444,7 @@ class Inpaint_Color_Net(nn.Module):
 
         return feat, mask
 
-    def forward_3P(self, mask, context, rgb, edge, unit_length=128, cuda=None, mode='ours'):
+    def forward_3P(self, mask, context, rgb, edge, unit_length=128, cuda=None, mode='orig'):
         with torch.no_grad():
             # print('rgb inpainting')
             if mode == 'orig':
@@ -479,6 +479,33 @@ class Inpaint_Color_Net(nn.Module):
                 idx, idy = np.where(msk > 0)
                 res_img[idx, idy, :] = inpainted[idx, idy, :]
                 rgb_output = torch.FloatTensor(res_img).to("cpu").permute(2,0,1).unsqueeze(0)
+            elif mode == 'nadav':
+                from inpainting.base_network_inpainting import InpaintingGenerator
+                netG = InpaintingGenerator(depth_factor=32, inference=False, activation="elu")
+                netG_state_dict = torch.load("checkpoints/nadav_inpainting_partitions.pth.tar")
+                netG.load_state_dict(netG_state_dict)
+                netG.to("cpu")
+                netG.eval()
+                h, w = rgb.shape[2:]
+                if h % 8 == 0 and w % 8 == 0:
+                    rgb_output, _, _ = netG(rgb * 2. - 1., mask)
+                else:
+                    img = rgb[0].numpy() * 2. - 1.
+                    img = np.swapaxes(img, 0, 2)
+                    img = np.swapaxes(img, 0, 1)
+                    msk = mask[0][0].numpy()
+                    from skimage.transform import resize
+                    img = resize(img, (h + (8 - h % 8) % 8, w + (8 - w % 8) % 8))
+                    msk = resize(msk, (h + (8 - h % 8) % 8, w + (8 - w % 8) % 8))
+                    nn_img = torch.FloatTensor(img).to("cpu").permute(2, 0, 1).unsqueeze(0)
+                    nn_mks = torch.FloatTensor(msk).to("cpu").unsqueeze(0).unsqueeze(0)
+                    nn_output, _, _ = netG(nn_img, nn_mks)
+                    res = nn_output[0].numpy()
+                    res = np.swapaxes(res, 0, 2)
+                    res = np.swapaxes(res, 0, 1)
+                    res = resize(res, (h, w))
+                    rgb_output = torch.FloatTensor(res).to("cpu").permute(2, 0, 1).unsqueeze(0)
+                rgb_output = 0.5 * (rgb_output + 1.)
             # Save
             # img = rgb[0].numpy()
             # img = np.swapaxes(img, 0, 2)
