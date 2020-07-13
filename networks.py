@@ -182,7 +182,7 @@ class Inpaint_Depth_Net(nn.Module):
 
         return enlarge_input, [anchor_h, anchor_h+h, anchor_w, anchor_w+w]
 
-    def forward_3P(self, mask, context, depth, edge, unit_length=128, cuda=None, mode='orig'):
+    def forward_3P(self, mask, context, depth, edge, unit_length=128, cuda=None, mode='ours'):
         with torch.no_grad():
             # print('depth inpainting')
             if mode == 'orig':
@@ -341,7 +341,7 @@ class Inpaint_Edge_Net(BaseNetwork):
 
         return enlarge_input, [anchor_h, anchor_h+h, anchor_w, anchor_w+w]
 
-    def forward_3P(self, mask, context, rgb, disp, edge, unit_length=128, cuda=None, mode='orig'):
+    def forward_3P(self, mask, context, rgb, disp, edge, unit_length=128, cuda=None, mode='ours'):
         with torch.no_grad():
             # print('edge inpainting')
             if mode == 'orig':
@@ -444,7 +444,7 @@ class Inpaint_Color_Net(nn.Module):
 
         return feat, mask
 
-    def forward_3P(self, mask, context, rgb, edge, unit_length=128, cuda=None, mode='orig'):
+    def forward_3P(self, mask, context, rgb, edge, unit_length=128, cuda=None, mode='opencv'):
         with torch.no_grad():
             # print('rgb inpainting')
             if mode == 'orig':
@@ -506,6 +506,28 @@ class Inpaint_Color_Net(nn.Module):
                     res = resize(res, (h, w))
                     rgb_output = torch.FloatTensor(res).to("cpu").permute(2, 0, 1).unsqueeze(0)
                 rgb_output = 0.5 * (rgb_output + 1.)
+            elif mode == 'opencv':
+                import cv2
+                img = rgb[0].numpy()
+                img = np.swapaxes(img, 0, 2)
+                img = np.swapaxes(img, 0, 1)
+                img = img * 255
+                img = img.astype(np.uint8)
+                msk = mask[0][0].numpy()
+                msk = msk * 255
+                msk[msk != 255] = 0
+                msk = msk.astype(np.uint8)
+                msk_for_inpainting = np.zeros_like(msk, dtype=np.uint8)
+                msk_for_inpainting[np.sum(img, axis=2) == 0] = 255
+                msk_for_inpainting = binary_dilation(msk_for_inpainting, iterations=5)
+                msk_for_inpainting = msk_for_inpainting.astype(np.uint8) * 255
+                inpainted = cv2.inpaint(cv2.cvtColor(img, cv2.COLOR_RGB2BGR), msk_for_inpainting, 3, cv2.INPAINT_TELEA)
+                inpainted = cv2.cvtColor(inpainted, cv2.COLOR_BGR2RGB)
+                res_img = np.copy(img.astype(np.float) / 255.)
+                idx, idy = np.where(msk > 0)
+                res_img[idx, idy, :] = inpainted[idx, idy, :]
+                rgb_output = torch.FloatTensor(res_img).to("cpu").permute(2,0,1).unsqueeze(0)
+
             # Save
             # img = rgb[0].numpy()
             # img = np.swapaxes(img, 0, 2)
