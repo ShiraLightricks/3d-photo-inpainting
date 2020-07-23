@@ -444,9 +444,8 @@ class Inpaint_Color_Net(nn.Module):
 
         return feat, mask
 
-    def forward_3P(self, mask, context, rgb, edge, unit_length=128, cuda=None, mode='opencv'):
+    def forward_3P(self, mask, context, rgb, edge, unit_length=128, cuda=None, mode='nadav_context_synthesis'):
         with torch.no_grad():
-            # print('rgb inpainting')
             if mode == 'orig':
                 input = torch.cat((rgb, edge, context, mask), dim=1)
                 n, c, h, w = input.shape
@@ -456,7 +455,6 @@ class Inpaint_Color_Net(nn.Module):
                 anchor_w = residual_w//2
                 enlarge_input = torch.zeros((n, c, h + residual_h, w + residual_w)).to(cuda)
                 enlarge_input[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w] = input
-                # enlarge_input[:, 3] = 1. - enlarge_input[:, 3]
                 enlarge_input = enlarge_input.to(cuda)
                 rgb_output = self.forward(enlarge_input)
                 rgb_output = rgb_output[..., anchor_h:anchor_h+h, anchor_w:anchor_w+w]
@@ -479,33 +477,47 @@ class Inpaint_Color_Net(nn.Module):
                 idx, idy = np.where(msk > 0)
                 res_img[idx, idy, :] = inpainted[idx, idy, :]
                 rgb_output = torch.FloatTensor(res_img).to("cpu").permute(2,0,1).unsqueeze(0)
-            elif mode == 'nadav':
+            elif mode == 'nadav_partitions' or mode == 'nadav_context_synthesis':
                 from inpainting.base_network_inpainting import InpaintingGenerator
                 netG = InpaintingGenerator(depth_factor=32, inference=False, activation="elu")
-                netG_state_dict = torch.load("checkpoints/nadav_inpainting_partitions.pth.tar")
+                if mode == 'nadav_partitions':
+                    netG_state_dict = torch.load("checkpoints/nadav_inpainting_partitions.pth.tar")
+                if mode == 'nadav_context_synthesis':
+                    netG_state_dict = torch.load("checkpoints/nadav_inpainting_context_synthesis.pth.tar")
                 netG.load_state_dict(netG_state_dict)
                 netG.to("cpu")
                 netG.eval()
                 h, w = rgb.shape[2:]
+                r = torch.clone(rgb[:, 0, :, :])
+                g = torch.clone(rgb[:, 1, :, :])
+                b = torch.clone(rgb[:, 2, :, :])
+                r[context[:, 0, :, :] <= 0.5] = 0.
+                g[context[:, 0, :, :] <= 0.5] = 0.
+                b[context[:, 0, :, :] <= 0.5] = 0.
+                rgb[:, 0, :, :] = torch.clone(r)
+                rgb[:, 1, :, :] = torch.clone(g)
+                rgb[:, 2, :, :] = torch.clone(b)
                 if h % 8 == 0 and w % 8 == 0:
                     rgb_output, _, _ = netG(rgb * 2. - 1., mask)
+                    rgb_output = rgb_output * 0.5 + 0.5
                 else:
-                    img = rgb[0].numpy() * 2. - 1.
+                    img = rgb[0].numpy()
                     img = np.swapaxes(img, 0, 2)
                     img = np.swapaxes(img, 0, 1)
                     msk = mask[0][0].numpy()
                     from skimage.transform import resize
                     img = resize(img, (h + (8 - h % 8) % 8, w + (8 - w % 8) % 8))
                     msk = resize(msk, (h + (8 - h % 8) % 8, w + (8 - w % 8) % 8))
+                    msk[msk > 0.] = 1.
                     nn_img = torch.FloatTensor(img).to("cpu").permute(2, 0, 1).unsqueeze(0)
                     nn_mks = torch.FloatTensor(msk).to("cpu").unsqueeze(0).unsqueeze(0)
-                    nn_output, _, _ = netG(nn_img, nn_mks)
+                    nn_output, _, _ = netG(nn_img * 2. - 1., nn_mks)
+                    nn_output = nn_output * 0.5 + 0.5
                     res = nn_output[0].numpy()
                     res = np.swapaxes(res, 0, 2)
                     res = np.swapaxes(res, 0, 1)
                     res = resize(res, (h, w))
                     rgb_output = torch.FloatTensor(res).to("cpu").permute(2, 0, 1).unsqueeze(0)
-                rgb_output = 0.5 * (rgb_output + 1.)
             elif mode == 'opencv':
                 import cv2
                 img = rgb[0].numpy()
@@ -522,11 +534,11 @@ class Inpaint_Color_Net(nn.Module):
                 msk_for_inpainting = binary_dilation(msk_for_inpainting, iterations=5)
                 msk_for_inpainting = msk_for_inpainting.astype(np.uint8) * 255
                 inpainted = cv2.inpaint(cv2.cvtColor(img, cv2.COLOR_RGB2BGR), msk_for_inpainting, 3, cv2.INPAINT_TELEA)
-                inpainted = cv2.cvtColor(inpainted, cv2.COLOR_BGR2RGB)
+                inpainted = cv2.cvtColor(inpainted, cv2.COLOR_BGR2RGB).astype(np.float) / 255.
                 res_img = np.copy(img.astype(np.float) / 255.)
                 idx, idy = np.where(msk > 0)
                 res_img[idx, idy, :] = inpainted[idx, idy, :]
-                rgb_output = torch.FloatTensor(res_img).to("cpu").permute(2,0,1).unsqueeze(0)
+                rgb_output = torch.FloatTensor(res_img).to("cpu").permute(2, 0, 1).unsqueeze(0)
 
             # Save
             # img = rgb[0].numpy()
@@ -537,7 +549,7 @@ class Inpaint_Color_Net(nn.Module):
             # msk = mask[0][0].numpy()
             # msk = msk * 255
             # msk = msk.astype(np.uint8)
-            # edg =edge[0][0].numpy()
+            # edg = edge[0][0].numpy()
             # edg = edg * 255
             # edg = edg.astype(np.uint8)
             # ctx = context[0][0].numpy()

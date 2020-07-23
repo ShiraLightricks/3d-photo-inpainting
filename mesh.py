@@ -1698,7 +1698,7 @@ def DL_inpaint_edge(mesh,
         resize_mask = open_small_mask(resize_rgb_dict['mask'], resize_rgb_dict['context'], 3, 41)
         specified_hole = resize_mask
         with torch.no_grad():
-            rgb_output = rgb_model.forward_3P(specified_hole,
+            rgb_output = rgb_model.forward_3P(resize_rgb_dict['mask'],
                                             resize_rgb_dict['context'],
                                             resize_rgb_dict['rgb'],
                                             resize_rgb_dict['edge'],

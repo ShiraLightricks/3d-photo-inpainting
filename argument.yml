@@ -11,16 +11,16 @@ traj_types: ['double-straight-line', 'double-straight-line', 'circle', 'circle']
 video_postfix: ['dolly-zoom-in', 'zoom-in', 'circle', 'swing']
 specific: ''
 longer_side_len: 960
-src_folder: image
+src_folder: image/from_lior
 depth_folder: depth
 mesh_folder: mesh
-video_folder: video
+video_folder: video/from_lior_nadav_ctx_msk/
 load_ply: False
 save_ply: True
 inference_video: True
 gpu_ids: -1
 offscreen_rendering: False
-img_format: '.jpg'
+img_format: '.jpeg'
 depth_format: '.npy'
 require_midas: True
 depth_threshold: 0.04
