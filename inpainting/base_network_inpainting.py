@@ -53,6 +53,7 @@ class GatedConv2d(torch.nn.Module):
         bias=True,
         activation=torch.nn.ELU(1.0, inplace=True),
         dropout=0,
+        gate_type="regular_conv",
     ):
         super(GatedConv2d, self).__init__()
         self.stride = stride
@@ -72,15 +73,57 @@ class GatedConv2d(torch.nn.Module):
             dilation=dilation,
             bias=bias,
         )
-        self.mask_conv2d = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            dilation=dilation,
-            bias=bias,
-        )
+        if gate_type == "regular_conv":
+            self.mask_conv2d = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                bias=bias,
+            )
+        elif gate_type == "single_channel":
+            self.mask_conv2d = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=1,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                bias=bias,
+            )
+        elif gate_type == "pixel_wise":
+            self.mask_conv2d = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=1,
+                stride=stride,
+                padding=0,
+                dilation=dilation,
+                bias=bias,
+            )
+        elif gate_type == "depth_separable":
+            self.mask_conv2d = nn.Sequential(
+                nn.Conv2d(
+                    in_channels=in_channels,
+                    out_channels=in_channels,
+                    kernel_size=kernel_size,
+                    stride=stride,
+                    padding=padding,
+                    dilation=dilation,
+                    bias=bias,
+                    groups=in_channels,
+                ),
+                nn.Conv2d(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=1,
+                    padding=0,
+                    bias=bias,
+                ),
+            )
+
         self.sigmoid = nn.Sigmoid()
         if dropout > 0:
             self.dropout = nn.Dropout(dropout)
@@ -99,7 +142,6 @@ class GatedConv2d(torch.nn.Module):
         # if self.stride == 2:
         #     x = x[:,:,1:,1:]
         #     mask = mask[:,:,1:,1:]
-
         x = x * self.sigmoid(mask)
 
         if self.activation is not None:
@@ -123,10 +165,13 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
         masking=True,
         dropout=0,
         activation="elu",
+        gate_type="regular_conv",
+        kernel_size=3
     ):
         super(GatedGeneratorSubNetwork, self).__init__()
         self.inference = inference
         self.masking = masking
+        self.gate_type = gate_type
         gated_activation = self._activations_map(activation)
 
         modules = []
@@ -140,9 +185,10 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
             GatedConv2d(
                 in_channels=depth_factor,
                 out_channels=depth_factor * 2,
-                kernel_size=3,
+                kernel_size=kernel_size,
                 stride=2,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
         modules.append(
@@ -151,15 +197,18 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
                 out_channels=depth_factor * 2,
                 kernel_size=3,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
+
         modules.append(
             GatedConv2d(
                 in_channels=depth_factor * 2,
                 out_channels=depth_factor * 4,
-                kernel_size=3,
+                kernel_size=kernel_size,
                 stride=2,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
         modules.append(
@@ -168,6 +217,7 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
                 out_channels=depth_factor * 4,
                 kernel_size=3,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
         modules.append(
@@ -176,6 +226,7 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
                 out_channels=depth_factor * 4,
                 kernel_size=3,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
 
@@ -187,6 +238,7 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
                 kernel_size=3,
                 dilation=2,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
         modules.append(
@@ -196,6 +248,7 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
                 kernel_size=3,
                 dilation=4,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
         modules.append(
@@ -205,6 +258,7 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
                 kernel_size=3,
                 dilation=8,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
         modules.append(
@@ -214,6 +268,7 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
                 kernel_size=3,
                 dilation=16,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
 
@@ -224,6 +279,7 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
                 out_channels=depth_factor * 4,
                 kernel_size=3,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
         modules.append(
@@ -232,6 +288,7 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
                 out_channels=depth_factor * 4,
                 kernel_size=3,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
 
@@ -247,6 +304,7 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
                 kernel_size=3,
                 dropout=dropout,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
         modules.append(
@@ -255,6 +313,7 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
                 out_channels=depth_factor * 2,
                 kernel_size=3,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
         modules.append(Upsample(scale_factor=2))
@@ -265,6 +324,7 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
                 kernel_size=3,
                 dropout=dropout,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
         modules.append(
@@ -273,11 +333,16 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
                 out_channels=depth_factor // 2,
                 kernel_size=3,
                 activation=gated_activation(),
+                gate_type=gate_type,
             )
         )
         modules.append(
             GatedConv2d(
-                in_channels=depth_factor // 2, out_channels=3, kernel_size=3, activation=None
+                in_channels=depth_factor // 2,
+                out_channels=3,
+                kernel_size=3,
+                activation=None,
+                gate_type=gate_type,
             )
         )
 
@@ -291,7 +356,8 @@ class GatedGeneratorSubNetwork(torch.nn.Module):
         else:
             masked_img = image
         x = torch.cat([masked_img, mask], dim=1)
-        x = self.gated_subnetwork(x)
+        for i, module in enumerate(self.gated_subnetwork):
+            x = module(x)
 
         if self.inference:
             x = 2.5 * x
@@ -322,14 +388,32 @@ class InpaintingGenerator(nn.Module):
     The generator network of the inpainting model
     """
 
-    def __init__(self, depth_factor=32, inference=True, activation="elu"):
+    def __init__(
+        self,
+        depth_factor=32,
+        inference=True,
+        activation="elu",
+        gate_type_coarse="regular_conv",
+        gate_type_fine="regular_conv",
+        kernel_size=3
+    ):
         super(InpaintingGenerator, self).__init__()
         self.inference = inference
         self.coarse_subnetwork = GatedGeneratorSubNetwork(
-            depth_factor=depth_factor, inference=inference, masking=True, activation=activation
+            depth_factor=depth_factor,
+            inference=inference,
+            masking=True,
+            activation=activation,
+            gate_type=gate_type_coarse,
+            kernel_size=kernel_size
         )
         self.refined_subnetwork = GatedGeneratorSubNetwork(
-            depth_factor=depth_factor, inference=inference, masking=False, activation=activation
+            depth_factor=depth_factor,
+            inference=inference,
+            masking=False,
+            activation=activation,
+            gate_type=gate_type_fine,
+            kernel_size=kernel_size
         )
 
     def forward(self, image, mask):
